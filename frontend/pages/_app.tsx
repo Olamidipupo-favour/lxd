@@ -12,8 +12,13 @@ export default function App({ Component, pageProps }: AppProps) {
 
     async function check() {
       if (router.pathname === '/settings') {
-        const { data } = await api.get('/auth/setup-status')
-        if (!data.admin_exists) return
+        try {
+          const { data } = await api.get('/auth/setup-status')
+          if (!data.admin_exists) return
+        } catch {
+          router.push('/login')
+          return
+        }
       }
       try {
         await api.get('/auth/me')
