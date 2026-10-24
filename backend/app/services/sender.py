@@ -35,7 +35,8 @@ async def send_via_mailbox(mailbox: Mailbox, to_email: str, subject: str, html_b
             port=mailbox.smtp_port,
             username=mailbox.username,
             password=mailbox.password,
-            start_tls=True,
+            use_tls=mailbox.smtp_port == 465,
+            start_tls=mailbox.smtp_port != 465,
             timeout=30,
         )
         return SendResult(success=True, message_id=msg['Message-ID'])

@@ -1,8 +1,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-.env
-.env.local
 node_modules/
 .next/
 dist/
@@ -11,3 +9,4 @@ build/
 .DS_Store
 .vercel
 render.yaml.bak
+config.bat
