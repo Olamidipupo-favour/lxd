@@ -33,6 +33,12 @@ async def setup(req: SetupReq, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
+@router.get("/setup-status")
+async def setup_status(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(AdminUser.id).limit(1))
+    return {"admin_exists": res.scalar_one_or_none() is not None}
+
+
 @router.post("/login")
 async def login(req: LoginReq, response: Response, db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(AdminUser).where(AdminUser.email == req.email.lower()))

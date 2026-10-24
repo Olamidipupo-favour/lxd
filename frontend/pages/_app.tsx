@@ -8,12 +8,21 @@ export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter()
 
   useEffect(() => {
-    if (router.pathname === '/login' || router.pathname === '/settings') return
-    api.get('/auth/me')
-      .then(() => {})
-      .catch(() => {
+    if (router.pathname === '/login') return
+
+    async function check() {
+      if (router.pathname === '/settings') {
+        const { data } = await api.get('/auth/setup-status')
+        if (!data.admin_exists) return
+      }
+      try {
+        await api.get('/auth/me')
+      } catch {
         router.push('/login')
-      })
+      }
+    }
+
+    check()
   }, [router.pathname])
 
   return <Component {...pageProps} />
