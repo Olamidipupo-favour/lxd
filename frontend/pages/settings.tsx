@@ -1,15 +1,21 @@
 import { useState } from 'react'
+import { useRouter } from 'next/router'
 import { setup } from '../lib/api'
 import Nav from '../components/Nav'
 
 export default function Settings() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [ok, setOk] = useState(false)
 
   async function doSetup() {
-    await setup(email, password)
-    setOk(true)
+    try {
+      await setup(email, password)
+      router.push('/login')
+    } catch {
+      router.push('/login')
+    }
   }
 
   return (
