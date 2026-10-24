@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.env.local
+node_modules/
+.next/
+dist/
+build/
+*.log
+.DS_Store
+.vercel
+render.yaml.bak
