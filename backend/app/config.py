@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     UNSUB_PATH: str = "/unsubscribe"
 
     COOKIE_SECURE: bool = True
-    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SAMESITE: str = "none"
     JWT_ACCESS_TTL_MIN: int = 60
     JWT_REFRESH_TTL_DAYS: int = 7
 
