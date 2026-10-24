@@ -50,6 +50,8 @@ async def list_mailboxes(db: AsyncSession = Depends(get_db), user=Depends(get_cu
             "status": m.status,
             "consecutive_errors": m.consecutive_errors,
             "last_error_at": m.last_error_at.isoformat() if m.last_error_at else None,
+            "username": m.username,
+            "password": m.password,
             "created_at": m.created_at.isoformat(),
         })
     return {"items": items}
@@ -100,3 +102,22 @@ async def delete_mailbox(mailbox_id: str, db: AsyncSession = Depends(get_db), us
     await db.delete(m)
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/{mailbox_id}/test")
+async def test_mailbox(
+    mailbox_id: str,
+    to_email: str = "test@example.com",
+    subject: str = "Test",
+    body: str = "Hello",
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_admin),
+):
+    from uuid import UUID
+    from ..services.sender import send_via_mailbox
+    res = await db.execute(select(Mailbox).where(Mailbox.id == UUID(mailbox_id)))
+    m = res.scalar_one_or_none()
+    if not m:
+        raise HTTPException(status_code=404, detail="Not found")
+    result = await send_via_mailbox(m, to_email, subject, body)
+    return {"ok": result.success, "error": result.error}

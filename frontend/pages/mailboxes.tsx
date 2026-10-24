@@ -8,10 +8,43 @@ const fetcher = (url: string) => api.get(url).then(r => r.data)
 export default function Mailboxes() {
   const { data, mutate } = useSWR('/mailboxes/', fetcher)
   const [form, setForm] = useState({ email: '', smtp_host: 'smtp.gmail.com', smtp_port: 587, username: '', password: '', daily_cap: 5, status: 'warming' })
+  const [editingId, setEditingId] = useState<string | null>(null)
 
-  async function add() {
-    await api.post('/mailboxes/', form)
+  async function save() {
+    if (editingId) {
+      await api.put(`/mailboxes/${editingId}`, {
+        smtp_host: form.smtp_host,
+        smtp_port: form.smtp_port,
+        username: form.username,
+        password: form.password,
+        daily_cap: form.daily_cap,
+        warmup_enabled: true,
+        status: form.status,
+      })
+    } else {
+      await api.post('/mailboxes/', form)
+    }
+    setEditingId(null)
     setForm({ email: '', smtp_host: 'smtp.gmail.com', smtp_port: 587, username: '', password: '', daily_cap: 5, status: 'warming' })
+    mutate()
+  }
+
+  async function edit(m: any) {
+    setEditingId(m.id)
+    setForm({
+      email: m.email,
+      smtp_host: m.smtp_host,
+      smtp_port: m.smtp_port,
+      username: m.username || '',
+      password: m.password || '',
+      daily_cap: m.daily_cap,
+      status: m.status,
+    })
+  }
+
+  async function testMail(m: any) {
+    const res = await api.post(`/mailboxes/${m.id}/test`, null, { params: { to_email: 'test@example.com', subject: 'Test', body: 'Hello' } })
+    alert(res.data.ok ? 'SMTP OK — sample sent' : `SMTP FAIL: ${res.data.error}`)
     mutate()
   }
 
@@ -47,7 +80,7 @@ export default function Mailboxes() {
               <option value="paused">paused</option>
             </select>
           </div>
-          <div className="mt"><button onClick={add}>Add Mailbox</button></div>
+          <div className="mt"><button onClick={save}>{editingId ? 'Save Mailbox' : 'Add Mailbox'}</button></div>
         </div>
         <div className="card">
           <table>
@@ -63,6 +96,8 @@ export default function Mailboxes() {
                   <td>{m.status}</td>
                   <td>{m.consecutive_errors}</td>
                   <td className="flex">
+                    <button className="secondary" onClick={() => edit(m)}>Edit</button>
+                    <button className="secondary" onClick={() => testMail(m)}>Test</button>
                     <button className="secondary" onClick={() => toggle(m)}>{m.status === 'active' ? 'Pause' : 'Activate'}</button>
                     <button className="secondary" onClick={() => del(m)}>Delete</button>
                   </td>
