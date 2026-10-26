@@ -247,12 +247,18 @@ async def run_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), x_c
     await db.commit()
 
     # pick mailbox
-    mb_res = await db.execute(select(Mailbox).where(Mailbox.status.in_(["active", "warming"])))
-    mailboxes = list(mb_res.scalars())
+    from uuid import UUID
+    if campaign.mailbox_id:
+        mb_res = await db.execute(select(Mailbox).where(Mailbox.id == campaign.mailbox_id, Mailbox.status.in_(["active", "warming"])))
+        mailboxes = list(mb_res.scalars())
+    else:
+        mb_res = await db.execute(select(Mailbox).where(Mailbox.status.in_(["active", "warming"])))
+        mailboxes = list(mb_res.scalars())
     if not mailboxes:
         return {"ok": False, "reason": "no_mailboxes"}
 
     sent = 0
+    mailbox_index = 0
     # get pending leads
     cl_res = await db.execute(select(CampaignLead).where(CampaignLead.campaign_id == campaign.id, CampaignLead.status == "pending").limit(campaign.daily_limit))
     for cl in cl_res.scalars():
@@ -266,10 +272,16 @@ async def run_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), x_c
             continue
         # pick mailbox with capacity
         mailbox = None
-        for m in mailboxes:
-            if m.emails_sent_today < m.daily_cap:
-                mailbox = m
-                break
+        if campaign.mailbox_id and mailboxes:
+            mailbox = mailboxes[0] if mailboxes[0].emails_sent_today < mailboxes[0].daily_cap else None
+        else:
+            # rotate through mailboxes
+            for _ in range(len(mailboxes)):
+                m = mailboxes[mailbox_index % len(mailboxes)]
+                mailbox_index += 1
+                if m.emails_sent_today < m.daily_cap:
+                    mailbox = m
+                    break
         if not mailbox:
             break  # no capacity
         # personalize
