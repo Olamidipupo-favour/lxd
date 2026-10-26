@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import useSWR from 'swr'
-import api from '../lib/api'
+import { api } from '../lib/api'
 import Nav from '../components/Nav'
 import { useAuthGate } from '../lib/authGate'
 

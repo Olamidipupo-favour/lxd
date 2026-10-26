@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import useSWR from 'swr'
-import api from '../lib/api'
+import { api } from '../lib/api'
 import Nav from '../components/Nav'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
