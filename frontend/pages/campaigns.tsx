@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { api } from '../lib/api'
 import Nav from '../components/Nav'
-import { useAuthGate } from '../lib/authGate'
 
 const fetcher = (url: string) => api.get(url).then(r => r.data)
 
 export default function Campaigns() {
-  useAuthGate()
   const { data, mutate } = useSWR('/campaigns/', fetcher)
   const { data: mdata } = useSWR('/mailboxes/', fetcher)
   const [form, setForm] = useState({ name: '', subject_template: '', body_template: '', from_name: '', mailbox_id: '', daily_limit: 1000, throttle_per_hour: 200 })

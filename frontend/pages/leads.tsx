@@ -2,12 +2,10 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { api } from '../lib/api'
 import Nav from '../components/Nav'
-import { useAuthGate } from '../lib/authGate'
 
 const fetcher = (url: string) => api.get(url).then(r => r.data)
 
 export default function Leads() {
-  useAuthGate()
   const { data, mutate } = useSWR('/leads/?limit=500', fetcher)
   const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
