@@ -15,9 +15,14 @@ class AdminUser(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
+    first_name = Column(String(128), nullable=True)
+    last_name = Column(String(128), nullable=True)
+    role = Column(String(32), default="admin")  # admin|user|viewer
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
+    password_reset_token = Column(String(255), nullable=True)
+    password_reset_expires = Column(DateTime, nullable=True)
 
 
 class Mailbox(Base):
