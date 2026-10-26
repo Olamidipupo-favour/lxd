@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import csv
 import io
+from uuid import UUID
 from ..db import get_db
 from ..auth import get_current_admin
-from ..models import Lead, Suppression
+from ..models import Lead, Suppression, CampaignLead
 from ..services.suppression import is_suppressed
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -25,9 +26,19 @@ class LeadCreate(BaseModel):
     source: Optional[str] = None
 
 
+class BulkAction(BaseModel):
+    lead_ids: List[str]
+    action: str  # suppress|unsuppress|delete|activate
+
+
 @router.get("/")
-async def list_leads(limit: int = 100, offset: int = 0, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
-    res = await db.execute(select(Lead).order_by(Lead.created_at.desc()).limit(limit).offset(offset))
+async def list_leads(limit: int = 500, offset: int = 0, q: str = None, status: str = None, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    stmt = select(Lead).order_by(Lead.created_at.desc())
+    if status:
+        stmt = stmt.where(Lead.status == status)
+    if q:
+        stmt = stmt.where(Lead.email.ilike(f"%{q}%") | Lead.first_name.ilike(f"%{q}%") | Lead.last_name.ilike(f"%{q}%") | Lead.company.ilike(f"%{q}%"))
+    res = await db.execute(stmt.offset(offset).limit(limit))
     total = await db.execute(select(func.count(Lead.id)))
     items = []
     for l in res.scalars():
@@ -38,6 +49,8 @@ async def list_leads(limit: int = 100, offset: int = 0, db: AsyncSession = Depen
             "last_name": l.last_name,
             "company": l.company,
             "title": l.title,
+            "phone": l.phone,
+            "website": l.website,
             "status": l.status,
             "source": l.source,
             "created_at": l.created_at.isoformat(),
@@ -92,7 +105,7 @@ async def upload_leads(file: UploadFile = File(...), db: AsyncSession = Depends(
             continue
         lead = Lead(
             email=email,
-            first_name=row.get('first_name') or row.get('First Name') or row.get('firstName'),
+            first_name=row.get('first_name') or row.get('First Name') or row.get('firstName') or row.get('first_name'),
             last_name=row.get('last_name') or row.get('Last Name') or row.get('lastName'),
             company=row.get('company') or row.get('Company'),
             title=row.get('title') or row.get('Title'),
@@ -105,3 +118,54 @@ async def upload_leads(file: UploadFile = File(...), db: AsyncSession = Depends(
         added += 1
     await db.commit()
     return {"added": added, "skipped": skipped}
+
+
+@router.post("/bulk")
+async def bulk_action(action: BulkAction, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    if not action.lead_ids:
+        raise HTTPException(status_code=400, detail="No leads selected")
+    if action.action == "delete":
+        for lid in action.lead_ids:
+            try:
+                await db.execute(delete(Lead).where(Lead.id == UUID(lid)))
+            except Exception:
+                continue
+        await db.commit()
+        return {"ok": True, "action": "delete"}
+    elif action.action == "suppress":
+        for lid in action.lead_ids:
+            try:
+                res = await db.execute(select(Lead).where(Lead.id == UUID(lid)))
+                lead = res.scalar_one_or_none()
+                if lead and lead.status != "suppressed":
+                    lead.status = "suppressed"
+                    db.add(Suppression(email=lead.email.lower(), reason="manual"))
+            except Exception:
+                continue
+        await db.commit()
+        return {"ok": True, "action": "suppress"}
+    elif action.action == "activate":
+        for lid in action.lead_ids:
+            try:
+                res = await db.execute(select(Lead).where(Lead.id == UUID(lid)))
+                lead = res.scalar_one_or_none()
+                if lead:
+                    lead.status = "active"
+            except Exception:
+                continue
+        await db.commit()
+        return {"ok": True, "action": "activate"}
+    elif action.action == "unsuppress":
+        for lid in action.lead_ids:
+            try:
+                res = await db.execute(select(Lead).where(Lead.id == UUID(lid)))
+                lead = res.scalar_one_or_none()
+                if lead:
+                    lead.status = "active"
+                await db.execute(delete(Suppression).where(Suppression.email == lead.email.lower() if lead else ""))
+            except Exception:
+                continue
+        await db.commit()
+        return {"ok": True, "action": "unsuppress"}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")

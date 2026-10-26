@@ -48,6 +48,134 @@ async def list_campaigns(db: AsyncSession = Depends(get_db), user=Depends(get_cu
     return {"items": items}
 
 
+@router.get("/{campaign_id}")
+async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    from uuid import UUID
+    try:
+        res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
+        campaign = res.scalar_one_or_none()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid campaign id")
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {
+        "id": str(campaign.id),
+        "name": campaign.name,
+        "subject_template": campaign.subject_template,
+        "body_template": campaign.body_template,
+        "from_name": campaign.from_name,
+        "mailbox_id": str(campaign.mailbox_id) if campaign.mailbox_id else "",
+        "domain_filter": campaign.domain_filter,
+        "throttle_per_hour": campaign.throttle_per_hour,
+        "daily_limit": campaign.daily_limit,
+        "status": campaign.status,
+        "schedule_at": campaign.schedule_at.isoformat() if campaign.schedule_at else None,
+        "unsubscribe_enabled": campaign.unsubscribe_enabled,
+        "track_opens": campaign.track_opens,
+        "track_clicks": campaign.track_clicks,
+        "created_at": campaign.created_at.isoformat(),
+    }
+
+
+@router.put("/{campaign_id}")
+async def update_campaign(campaign_id: str, req: CampaignCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    from uuid import UUID
+    try:
+        res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
+        campaign = res.scalar_one_or_none()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid campaign id")
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Not found")
+    if campaign.status == "running":
+        raise HTTPException(status_code=400, detail="Cannot edit running campaign")
+    data = req.dict()
+    if data.get("mailbox_id") == "":
+        data["mailbox_id"] = None
+    for key, value in data.items():
+        if hasattr(campaign, key):
+            setattr(campaign, key, value)
+    campaign.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(campaign)
+    return {"ok": True}
+
+
+@router.delete("/{campaign_id}")
+async def delete_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    from uuid import UUID
+    try:
+        res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
+        campaign = res.scalar_one_or_none()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid campaign id")
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Not found")
+    if campaign.status == "running":
+        raise HTTPException(status_code=400, detail="Cannot delete running campaign")
+    await db.delete(campaign)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/{campaign_id}/progress")
+async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    from uuid import UUID
+    try:
+        res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
+        campaign = res.scalar_one_or_none()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid campaign id")
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Not found")
+    total = await db.scalar(select(func.count(CampaignLead.id)).where(CampaignLead.campaign_id == campaign.id))
+    pending = await db.scalar(select(func.count(CampaignLead.id)).where(CampaignLead.campaign_id == campaign.id, CampaignLead.status == "pending"))
+    sent = await db.scalar(select(func.count(CampaignLead.id)).where(CampaignLead.campaign_id == campaign.id, CampaignLead.status == "sent"))
+    failed = await db.scalar(select(func.count(CampaignLead.id)).where(CampaignLead.campaign_id == campaign.id, CampaignLead.status == "failed"))
+    skipped = await db.scalar(select(func.count(CampaignLead.id)).where(CampaignLead.campaign_id == campaign.id, CampaignLead.status == "skipped"))
+    return {
+        "status": campaign.status,
+        "total": total or 0,
+        "pending": pending or 0,
+        "sent": sent or 0,
+        "failed": failed or 0,
+        "skipped": skipped or 0,
+        "progress": round(((sent or 0) / (total or 1)) * 100, 2) if total else 0,
+    }
+
+
+@router.post("/{campaign_id}/start")
+async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    from uuid import UUID
+    try:
+        res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
+        campaign = res.scalar_one_or_none()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid campaign id")
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Not found")
+    if campaign.status == "completed":
+        raise HTTPException(status_code=400, detail="campaign completed")
+    campaign.status = "running"
+    await db.commit()
+    return {"ok": True, "status": "running"}
+
+
+@router.post("/{campaign_id}/pause")
+async def pause_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
+    from uuid import UUID
+    try:
+        res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
+        campaign = res.scalar_one_or_none()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid campaign id")
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Not found")
+    campaign.status = "paused"
+    await db.commit()
+    return {"ok": True, "status": "paused"}
+
+
 @router.post("/")
 async def create_campaign(req: CampaignCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
     data = req.dict()
@@ -85,17 +213,34 @@ async def populate_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)
     return {"added": added}
 
 
+@router.post("/run-all")
+async def run_all_campaigns(db: AsyncSession = Depends(get_db), x_cron_secret: Optional[str] = Header(None)):
+    if settings.INTERNAL_CRON_SECRET and x_cron_secret != settings.INTERNAL_CRON_SECRET:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    res = await db.execute(select(Campaign).where(Campaign.status.in_(["draft", "scheduled", "running"])))
+    campaigns = res.scalars().all()
+    results = []
+    for campaign in campaigns:
+        if campaign.status == "completed":
+            continue
+        campaign.status = "running"
+        await db.commit()
+        results.append({"id": str(campaign.id), "name": campaign.name, "status": "started"})
+    return {"ok": True, "campaigns": results, "count": len(results)}
+
+
 @router.post("/{campaign_id}/run")
 async def run_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), x_cron_secret: Optional[str] = Header(None)):
     if settings.INTERNAL_CRON_SECRET and x_cron_secret != settings.INTERNAL_CRON_SECRET:
         raise HTTPException(status_code=401, detail="unauthorized")
     from uuid import UUID
-    res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
-    campaign = res.scalar_one_or_none()
+    try:
+        res = await db.execute(select(Campaign).where(Campaign.id == UUID(campaign_id)))
+        campaign = res.scalar_one_or_none()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid campaign id")
     if not campaign:
         raise HTTPException(status_code=404, detail="Not found")
-    if campaign.status not in ["scheduled", "running", "draft"]:  # allow manual trigger
-        pass
     if campaign.status == "completed":
         return {"ok": False, "reason": "completed"}
     campaign.status = "running"

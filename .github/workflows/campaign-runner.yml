@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '*/30 * * * *'  # every 30 min
   workflow_dispatch:
+    inputs:
+      campaign_id:
+        description: 'Specific campaign ID (leave empty to run all)'
+        required: false
+        type: string
 
 jobs:
   run:
@@ -11,7 +16,22 @@ jobs:
     steps:
       - name: Call campaign runner
         run: |
-          curl -X POST "${{ secrets.API_BASE_URL }}/campaigns/${{ secrets.CAMPAIGN_ID }}/run" \
-            -H "Content-Type: application/json" \
-            -H "x-cron-secret: ${{ secrets.INTERNAL_CRON_SECRET }}" \
-            -f || exit 1
+          if [ -n "${{ github.event.inputs.campaign_id }}" ]; then
+            echo "Running specific campaign: ${{ github.event.inputs.campaign_id }}"
+            curl -X POST "${{ secrets.API_BASE_URL }}/campaigns/${{ github.event.inputs.campaign_id }}/run" \
+              -H "Content-Type: application/json" \
+              -H "x-cron-secret: ${{ secrets.INTERNAL_CRON_SECRET }}" \
+              -f || exit 1
+          elif [ -n "${{ secrets.CAMPAIGN_ID }}" ]; then
+            echo "Running campaign from secret"
+            curl -X POST "${{ secrets.API_BASE_URL }}/campaigns/${{ secrets.CAMPAIGN_ID }}/run" \
+              -H "Content-Type: application/json" \
+              -H "x-cron-secret: ${{ secrets.INTERNAL_CRON_SECRET }}" \
+              -f || exit 1
+          else
+            echo "Running all campaigns"
+            curl -X POST "${{ secrets.API_BASE_URL }}/campaigns/run-all" \
+              -H "Content-Type: application/json" \
+              -H "x-cron-secret: ${{ secrets.INTERNAL_CRON_SECRET }}" \
+              -f || exit 1
+          fi
