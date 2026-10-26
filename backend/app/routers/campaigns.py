@@ -50,7 +50,10 @@ async def list_campaigns(db: AsyncSession = Depends(get_db), user=Depends(get_cu
 
 @router.post("/")
 async def create_campaign(req: CampaignCreate, db: AsyncSession = Depends(get_db), user=Depends(get_current_admin)):
-    c = Campaign(**req.dict())
+    data = req.dict()
+    if data.get("mailbox_id") == "":
+        data["mailbox_id"] = None
+    c = Campaign(**data)
     db.add(c)
     await db.commit()
     await db.refresh(c)
