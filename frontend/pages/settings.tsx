@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { api, setup } from '../lib/api'
 import Nav from '../components/Nav'
-import { useAuthGate } from '../lib/authGate'
 
 export default function Settings() {
-  useAuthGate()
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

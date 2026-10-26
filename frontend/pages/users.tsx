@@ -4,12 +4,10 @@ import { api } from '../lib/api'
 import Nav from '../components/Nav'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
-import { useAuthGate } from '../lib/authGate'
 
 const fetcher = (url: string) => api.get(url).then(r => r.data)
 
 export default function Users() {
-  useAuthGate()
   const { data, mutate } = useSWR('/auth/users', fetcher)
   const [showAdd, setShowAdd] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
