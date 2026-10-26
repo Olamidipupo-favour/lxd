@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import api, { setup } from '../lib/api'
+import { api, setup } from '../lib/api'
 import Nav from '../components/Nav'
 import { useAuthGate } from '../lib/authGate'
 

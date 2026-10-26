@@ -1,5 +1,5 @@
 import useSWR from 'swr'
-import api from '../lib/api'
+import { api } from '../lib/api'
 import Nav from '../components/Nav'
 import Tooltip from '../components/Tooltip'
 
