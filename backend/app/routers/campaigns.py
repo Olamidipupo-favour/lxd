@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
 from pydantic import BaseModel
@@ -214,8 +214,18 @@ async def populate_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/run-all")
-async def run_all_campaigns(db: AsyncSession = Depends(get_db), x_cron_secret: Optional[str] = Header(None)):
-    if settings.INTERNAL_CRON_SECRET and x_cron_secret != settings.INTERNAL_CRON_SECRET:
+async def run_all_campaigns(request: Request, db: AsyncSession = Depends(get_db), x_cron_secret: Optional[str] = Header(None)):
+    from ..auth import get_current_admin
+    authorized = False
+    if settings.INTERNAL_CRON_SECRET and x_cron_secret == settings.INTERNAL_CRON_SECRET:
+        authorized = True
+    if not authorized:
+        try:
+            await get_current_admin(request)
+            authorized = True
+        except Exception:
+            pass
+    if not authorized:
         raise HTTPException(status_code=401, detail="unauthorized")
     res = await db.execute(select(Campaign).where(Campaign.status.in_(["draft", "scheduled", "running"])))
     campaigns = res.scalars().all()
