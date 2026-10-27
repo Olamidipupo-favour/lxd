@@ -230,8 +230,18 @@ async def run_all_campaigns(db: AsyncSession = Depends(get_db), x_cron_secret: O
 
 
 @router.post("/{campaign_id}/run")
-async def run_campaign(campaign_id: str, db: AsyncSession = Depends(get_db), x_cron_secret: Optional[str] = Header(None)):
-    if settings.INTERNAL_CRON_SECRET and x_cron_secret != settings.INTERNAL_CRON_SECRET:
+async def run_campaign(campaign_id: str, request: Request, db: AsyncSession = Depends(get_db), x_cron_secret: Optional[str] = Header(None)):
+    from ..auth import get_current_admin
+    authorized = False
+    if settings.INTERNAL_CRON_SECRET and x_cron_secret == settings.INTERNAL_CRON_SECRET:
+        authorized = True
+    if not authorized:
+        try:
+            await get_current_admin(request)
+            authorized = True
+        except Exception:
+            pass
+    if not authorized:
         raise HTTPException(status_code=401, detail="unauthorized")
     from uuid import UUID
     try:
